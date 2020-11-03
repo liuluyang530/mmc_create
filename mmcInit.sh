@@ -88,9 +88,11 @@ sectorsAll=`fdisk -l $deviceName | awk '$8~/sectors/ {print $7}'`
 cylindersAll=`fdisk -l $deviceName | awk '$6~/cylinders/ {print $5}'`
 headsAll=`fdisk -l $deviceName | awk '$2~/heads/ {print $1}'`
 perSectorSize=`fdisk -l $deviceName | awk '$3~/logical/ {print $4}'`
-else
+elif [ $PC -eq 1 ]
+then
 deviceName="/dev/mmcblk0"
-diskSize=`fdisk -l /dev/mmcblk0 | awk '$3~/GiB/ {print $2}' | awk -F： '{print $2}'`
+#deviceName=`fdisk -l | awk '$2~/dev\/mmcblk[0-9]:/ {print $2}' | awk -F: '{print $1}'`
+diskSize=`fdisk -l $deviceName | awk '$3~/GiB/ {print $2}' | awk -F： '{print $2}'`
 if [ -z "$diskSize" ];then
 	diskSize=`fdisk -l $deviceName | awk '$4~/GiB/ {print $3}' | awk -F. '{print $1}'`
 fi
@@ -104,6 +106,27 @@ perSectorSize=`fdisk -l $deviceName | awk '$1~/单元/ {print $5}'`
 if [ -z "$perSectorSize" ];then
 	perSectorSize=`fdisk -l $deviceName | awk '$3~/logical/ {print $4}'`
 fi
+
+elif [ $PC -eq 2 ]
+then
+deviceName="/dev/mmcblk0"
+#deviceName=`fdisk -l | awk '$2~/dev\/mmcblk[0-9]:/ {print $2}' | awk -F: '{print $1}'`
+diskSize=`fdisk -l $deviceName | awk '$3~/GiB/ {print $2}' | awk -F： '{print $2}'`
+if [ -z "$diskSize" ];then
+	diskSize=`fdisk -l $deviceName | awk '$4~/GB/ {print $3}' | awk -F. '{print $1}'`
+fi
+sectorsAll=`fdisk -l $deviceName |grep Disk |awk -F ， '{print $3}' | awk -F " " '{print $1}'`
+if [ -z "$sectorsAll" ];then
+	sectorsAll=`fdisk -l $deviceName | awk '$8~/sectors/ {print $7}'`
+fi
+cylindersAll=`fdisk -l $deviceName | awk '$6~/cylinders/ {print $5}'`
+headsAll=`fdisk -l $deviceName | awk '$2~/heads/ {print $1}'`
+perSectorSize=`fdisk -l $deviceName | awk '$1~/单元/ {print $5}'`
+if [ -z "$perSectorSize" ];then
+	perSectorSize=`fdisk -l $deviceName | awk '$3~/logical/ {print $4}'`
+fi
+else 
+	echo "system not support."
 fi
 
 echo "deviceName=$deviceName  diskSize=$diskSize sectorsAll=$sectorsAll cylindersAll=$cylindersAll headsAll=$headsAll perSectorSize=$perSectorSize">> mmcDisk.log
@@ -427,7 +450,9 @@ esac
 	# destroy the partition table
 	dd if=/dev/zero of=${deviceName} bs=512 count=2
 	sync
-	partprobe
+	if [ $PC -ne 2 ];then
+		partprobe
+	fi
 return 1
 
 }
@@ -440,7 +465,7 @@ return 1
 ############################
 mkfsExt4(){
 local tempCount=1
-local mmcMountDir="/mnt"
+local mmcMountDir=$confEmmcMountDir2
 fdisk -l $deviceName | awk '{if($1~/dev\/mmcblk[0-9]/) print $1}' | while read line
 do
 	echo $line >>mmcDisk.log
@@ -513,7 +538,7 @@ mkBootDir(){
 }
 
 fsckPart(){
-local mmcMountDir="/mnt"
+local mmcMountDir=$confEmmcMountDir2
 fdisk -l $deviceName | awk '{if($1~/dev\/mmcblk[0-9]/) print $1}' | while read line
 do
 	echo $line >>mmcDisk.log
@@ -566,11 +591,18 @@ fi
 if [ `uname -a |grep Polaris | wc -l` -eq 1 ]; then
     PC=0
 else
+if [ `lsb_release -a |grep Ubuntu | wc -l ` -gt 0 ];then
     PC=1
+	echo "Ubuntu system."
+fi
+if [ `lsb_release -a |grep CentOS | wc -l ` -gt 0 ];then
+    PC=2
+	echo "CentOS system."
+fi
 fi
 
 #2. include config file.
-if [ $PC -eq 1 ]; then
+if [ $PC -gt 0 ]; then
 	confFile=$PWD/mmcDisk.conf
 else
 	confFile=/etc/mmcDisk.conf
@@ -651,4 +683,3 @@ echo "calcPart4sectorStart=$calcPart4sectorStart calcPart4sectorEnd=$calcPart4se
 fi
 
 exit 0
-
